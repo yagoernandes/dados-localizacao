@@ -9,23 +9,12 @@ import datetime
 
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
+        print('gerando dataframe')
         dataframe = read_mongo('denox', 'dados_rastreamento')
         print(dataframe)
         print('oi')
-        # start_lat, start_lon = 40.6976637, -74.1197643
         distances_km = []
-        # anterior = None
-        # for row in dataframe.itertuples(index=False):
-        #     if anterior:
-        #         distances_km.append(
-        #             haversine_distance(anterior.latitude, anterior.longitude,
-        #                                row.latitude, row.longitude)
-        #         )
-        #     else:
-        #         distances_km.append(0)
-        #     anterior = row
-        # print(distances_km)
-        distances_get = getDistances(dataframe) 
+        distances_get = getDistances(dataframe)
         print('distances_get ::: ', distances_get)
 
         print('soma ::: ', sum(distances_get))
@@ -34,17 +23,62 @@ class MainHandler(tornado.web.RequestHandler):
         self.write("Hello, world")
 
     def post(self):
+        print(':::Capturando dados')
         response = tornado.escape.json_decode(self.request.body)
-        # dataInicio = datetime.datetime(response['dataInicio']).time
-        # dataFim = datetime.datetime(response['dataFim'])
-        # print(dataInicio)
-        # print(dataFim)
+        print(response)
+        print(':::Gerando dataframe')
         dataframe = read_mongo('denox', 'dados_rastreamento', {
             "serial": response['serial'],
             "datahora": {"$gt": response['dataInicio'], "$lt": response['dataFim']}
         })
         print(dataframe)
-        self.write(response)
+        print(':::Gerando lista de distancias')
+        distancias = getDistances(dataframe)
+        print(distancias)
+        print(':::Somando distâncias')
+        distancia_total = sum(distancias)
+        print(distancia_total)
+        print(':::Calculando quantidade de respostas')
+        quantidade = len(dataframe.index)
+        print(quantidade)
+        print(':::Gerando array de movimento')
+        print('tamanho do dataframe: ', len(dataframe.index))
+        array_movimento = []
+        tempos = []
+        # array_movimento.append(dataframe.iloc[0])
+        for x in range(quantidade):
+            # print(dataframe.iloc[x])
+            if (x == 0):
+                array_movimento.append(dataframe.iloc[x])
+                pass
+            print(':::::::::::::::', dataframe.iloc[x]['situacao_movimento'],
+                  ' != ', array_movimento[-1]['situacao_movimento'])
+
+            if (dataframe.iloc[x]['situacao_movimento'] != array_movimento[-1]['situacao_movimento']):
+                array_movimento.append(dataframe.iloc[x])
+                movimentando = array_movimento[-1]['situacao_movimento']
+                print("dataframe.iloc[x]['datahora']::::", dataframe.iloc[x]['datahora'])
+                print("array_movimento[-1]['datahora']::", array_movimento[-1]['datahora'])
+                deltatempo = dataframe.iloc[x]['datahora'] - \
+                    array_movimento[-1]['datahora']
+                print("deltatempo::", deltatempo)
+                tempos.append((movimentando, deltatempo))
+        print('::::::::::::::::::::::::::::::::::::::::')
+        print(array_movimento)
+        print(':::::::::::::::tempos')
+        print(tempos)
+        print(':::Montando resposta')
+        resposta = {
+            "distancia_percorrida": distancia_total,
+            # "tempo_em_movimento": 43211234, #=> ESTE TEMPO DEVE ESTAR EM SEGUNDOS!
+            # "tempo_parado": 987654321, #=> ESTE TEMPO DEVE ESTAR EM SEGUNDOS!
+            # "centroides_paradas":[[-19.985399, -43.948095],[-19.974550, -43.948438]],
+            "serial": response['serial']
+        }
+        print(resposta)
+        print(':::Enviando resposta')
+        self.write(resposta)
+
 
 def getDistances(dataframe):
     distances_km = []
@@ -53,7 +87,7 @@ def getDistances(dataframe):
         if anterior:
             distances_km.append(
                 haversine_distance(anterior.latitude, anterior.longitude,
-                                    row.latitude, row.longitude)
+                                   row.latitude, row.longitude)
             )
         else:
             distances_km.append(0)
