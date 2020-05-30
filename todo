@@ -1,0 +1,18 @@
+Servidor:
+
+[x] - Subir servidor
+[x] - Receber requisição POST (/api/calcula_metricas)
+[x] - Receber requisição GET (/api/retorna_metricas)
+[x] - Receber json na requisição
+[x] - Ler do MongoDB
+[x] - Escrever no MongoDB
+[x] - Criar banco de dados MongoDB (denox)
+[x] - Criar collection dados_rastreamento
+
+Cálculos:
+
+[x] - Distância percorrida
+[] - Tempo em movimento
+[] - Tempo parado
+[] - Centróides das paradas
+[] - Serial
