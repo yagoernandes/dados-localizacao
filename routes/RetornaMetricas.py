@@ -5,92 +5,70 @@ import pandas as pd
 from pymongo import MongoClient
 import numpy as np
 import datetime
-
-
-# def differenceInMeters(lat1, lon1, lat2, lon2):
-#     metros_por_grau_latitude = 110574.61087757687
-#     metros_por_grau_longitude = 111302.61697430261
-#     diff_lat = lat1-lat2
-#     diff_lon = lon1-lon2
-#     diff_metros_lat = diff_lat * metros_por_grau_latitude
-#     diff_metros_lon = diff_lon * metros_por_grau_longitude
-#     print('diferença latitude: ', diff_metros_lat)
-#     print('diferença longitude: ', diff_metros_lon)\
-#     d = math.sqrt(diff_metros_lat*diff_metros_lat + diff_metros_lon * diff_metros_lon)
-#     print('diferença: ', d)
-#     return d
+from sklearn.cluster import KMeans
 
 
 class RetornaMetricas(tornado.web.RequestHandler):
     def get(self):
-        print(':::Capturando dados')
+        # Capturando parametros
         serial = self.get_argument('serial')
         dataInicio = int(self.get_argument('dataInicio'))
         dataFim = int(self.get_argument('dataFim'))
 
-        print(':::Gerando dataframe')
+        # Gerando dataframe
         dataframe = read_mongo('denox', 'dados_rastreamento', {
             "serial": serial,
             "datahora": {"$gt": dataInicio, "$lt": dataFim}
         })
-        print(dataframe)
 
-        print(':::Gerando lista de distancias')
+        # Gerando lista de distancias
         distancias = getDistances(dataframe)
-        print(distancias)
 
-        print(':::Somando distâncias')
+        # Somando distâncias
         distancia_total = sum(distancias)
-        print(distancia_total)
 
-        print(':::Calculando quantidade de respostas')
+        # Calculando quantidade de respostas
         quantidade = len(dataframe.index)
-        print(quantidade)
 
-        print(':::Gerando array de movimento')
-        print('tamanho do dataframe: ', len(dataframe.index))
+        # initial state
         array_movimento = []
         temposParadoLista = []
         temposMovimentoLista = []
-        # array_movimento.append(dataframe.iloc[0])
+        posicoesParado = []
+        quantidadeDeParadas = 0
+        # Gerando array de movimento
         for x in range(quantidade):
-            # print(dataframe.iloc[x])
             if (x == 0):
-                array_movimento.append(dataframe.iloc[x])
+                array_movimento.append(dataframe.iloc[0])
+                if(not dataframe.iloc[0]['situacao_movimento']):
+                    quantidadeDeParadas = quantidadeDeParadas + 1
                 pass
-            print(':::::::::::::::', dataframe.iloc[x]['situacao_movimento'],
-                  ' != ', array_movimento[-1]['situacao_movimento'])
 
             movimentando = array_movimento[-1]['situacao_movimento']
+            if (not movimentando):
+                posicoesParado.append(
+                    [dataframe.iloc[x]['latitude'], dataframe.iloc[x]['longitude']])
+
             if (dataframe.iloc[x]['situacao_movimento'] != movimentando):
-                # print("dataframe.iloc[x]['datahora']::::",
-                #       dataframe.iloc[x]['datahora'])
-                print('======================================================')
-                print(array_movimento)
-                print('======================================================')
-                print("dataframe.iloc[x]['datahora']::::",
-                      dataframe.iloc[x]['_id'])
-                print("array_movimento[-1]['datahora']::",
-                      array_movimento[-1]['_id'])
+
                 deltatempo = int(
                     dataframe.iloc[x]['datahora']) - int(array_movimento[-1]['datahora'])
-                print("deltatempo::", deltatempo)
-                if(movimentando):
-                    temposMovimentoLista.append(deltatempo)
-                else:
+                if(movimentando):  # Quando para
                     temposParadoLista.append(deltatempo)
+                    quantidadeDeParadas = quantidadeDeParadas + 1
+                else:  # Quando começa a andar
+                    temposMovimentoLista.append(deltatempo)
                 array_movimento.append(dataframe.iloc[x])
-        print('::::::::::::::::::::::::::::::::::::::::')
-        print(array_movimento)
-        print(':::::::::::::::tempos')
+        kmeans = KMeans(n_clusters=quantidadeDeParadas,
+                        random_state=0).fit(posicoesParado)
         tempoParado = sum(temposParadoLista)
         tempoMovimento = sum(temposMovimentoLista)
-        print(':::Montando resposta')
+        # Montando resposta
         resposta = {
             "distancia_percorrida": distancia_total,
-            "tempo_em_movimento": tempoMovimento, #=> ESTE TEMPO DEVE ESTAR EM SEGUNDOS!
-            "tempo_parado": tempoParado, #=> ESTE TEMPO DEVE ESTAR EM SEGUNDOS!
-            # "centroides_paradas":[[-19.985399, -43.948095],[-19.974550, -43.948438]],
+            "tempo_em_movimento": tempoMovimento,
+            "tempo_parado": tempoParado,
+            "centroides_paradas": kmeans.cluster_centers_.tolist(),
             "serial": serial
         }
         print(':::Enviando resposta')
