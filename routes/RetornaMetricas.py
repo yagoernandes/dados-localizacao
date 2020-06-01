@@ -53,7 +53,7 @@ class RetornaMetricas(tornado.web.RequestHandler):
 
                 deltatempo = int(
                     dataframe.iloc[x]['datahora']) - int(array_movimento[-1]['datahora'])
-                if(movimentando):  # Quando para
+                if (movimentando):  # Quando para
                     temposParadoLista.append(deltatempo)
                     quantidadeDeParadas = quantidadeDeParadas + 1
                 else:  # Quando começa a andar
@@ -61,9 +61,10 @@ class RetornaMetricas(tornado.web.RequestHandler):
                 array_movimento.append(dataframe.iloc[x])
         kmeans = KMeans(n_clusters=quantidadeDeParadas,
                         random_state=0).fit(posicoesParado)
+
         tempoParado = sum(temposParadoLista)
         tempoMovimento = sum(temposMovimentoLista)
-        # Montando resposta
+        # Enviando resposta
         resposta = {
             "distancia_percorrida": distancia_total,
             "tempo_em_movimento": tempoMovimento,
@@ -71,47 +72,41 @@ class RetornaMetricas(tornado.web.RequestHandler):
             "centroides_paradas": kmeans.cluster_centers_.tolist(),
             "serial": serial
         }
-        print(':::Enviando resposta')
+        # gravando
+        print(write_mongo('denox', 'resultados_yago', resposta))
+        resposta['_id'] = str(resposta['_id'])
         self.write(resposta)
 
 
 def getDistances(dataframe):
-    distances_km = []
+    distances = []
     anterior = None
     for row in dataframe.itertuples(index=False):
         if anterior:
-            distances_km.append(
+            distances.append(
                 haversine_distance(anterior.latitude, anterior.longitude,
                                    row.latitude, row.longitude)
             )
         else:
-            distances_km.append(0)
+            distances.append(0)
         anterior = row
-    # print(distances_km)
-    return distances_km
+    return distances
 
 
 def read_mongo(dbName, collectionName, query={}, host='localhost', port=27017, username=None, password=None):
-    """ Read from Mongo and Store into DataFrame """
-
-    # Connect to MongoDB
     db = _connect_mongo(host=host, port=port,
                         username=username, password=password, db=dbName)
-
-    # Make a query to the specific DB and Collection
     cursor = db[collectionName].find(query)
-
-    # Expand the cursor and construct the DataFrame
     df = pd.DataFrame(list(cursor))
-
-    # print(df)
-    # Delete the _id
-    # print('tamanho :::: ', tamanho)
-    # if no_id:
-    # if no_id and len(df.index) > 0:
-    #     del df['_id']
-
     return df
+
+
+def write_mongo(dbName, collectionName, data={}, host='localhost', port=27017, username=None, password=None):
+    db = _connect_mongo(host=host, port=port,
+                        username=username, password=password, db=dbName)
+    collection = db[collectionName]
+    collection.insert_one(data)
+    # return str(inserted.inserted_id)
 
 
 def haversine_distance(lat1, lon1, lat2, lon2):
@@ -127,13 +122,10 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
 
 def _connect_mongo(host, port, username, password, db):
-    """ A util for making a connection to mongo """
-
     if username and password:
         mongo_uri = 'mongodb://%s:%s@%s:%s/%s' % (
             username, password, host, port, db)
         conn = MongoClient(mongo_uri)
     else:
         conn = MongoClient(host, port)
-
     return conn[db]
